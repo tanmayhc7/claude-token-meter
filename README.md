@@ -1,115 +1,271 @@
-# claude-token-meter
+<div align="center">
 
-A Claude Code plugin that shows your token usage live, while Claude is still responding, and warns you before a session goes over a token or dollar budget.
+# 📟 claude-token-meter
 
-## What it shows
+### See your Claude Code token usage *live*, while Claude is still typing.
 
-**A "Token usage" pane** beside the chat (reopen it any time with `/tokens`):
+A Claude Code plugin with a live usage pane, a status line, budgets that warn you **before** you overspend,<br>
+a shared total across **every** session on your machine, and a built-in cost calculator.
 
-- **Input tokens**, split into uncached, cache read and cache write
-- **Output tokens**, plus an estimate that counts up while a response is still streaming
-- Total tokens, number of model requests, and the session's cost
-- A context-window bar (green, then yellow at 60%, red at 85%)
-- A bar for each budget you've set
+<br>
 
-**A status line entry** with the same figures on one line, for example:
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
+[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=for-the-badge)](https://github.com/tanmayhc7/claude-token-meter)
+[![TypeScript](https://img.shields.io/badge/TypeScript-TSX-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](hooks/register.tsx)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue?style=for-the-badge)](.claude-plugin/plugin.json)
 
+[**Install**](#-install) · [**Features**](#-features) · [**Commands**](#-commands) · [**How it works**](#-how-the-all-sessions-total-works) · [**Development**](#-development)
+
+</div>
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 📊 Live usage pane
+A **Token usage** pane beside the chat. Reopen it any time with `/tokens`.
+
+- Input split into **uncached**, **cache read** and **cache write**
+- Output tokens, with a **live estimate** while a response streams
+- Total tokens, request count, and session cost
+- Context-window bar: 🟢 → 🟡 at 60% → 🔴 at 85%
+- A progress bar for every budget you set
+
+</td>
+<td width="50%" valign="top">
+
+### 📟 Status line
+The same numbers, on one line, always visible:
+
+```text
+in 182.4k · out 6.1k +~240 · Σ 188.5k/500.0k
+· ctx 18% · $0.42/$5.00
+│ all 3.42M/5.00M · 1.58M left
 ```
-in 182.4k · out 6.1k +~240 · Σ 188.5k/500.0k · ctx 18% · $0.42/$5.00 │ all 3.42M/5.00M · 1.58M left
+
+Subagent requests are counted too.
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🚨 Budgets that warn early
+Set a **token** budget, a **dollar** budget, or both. You get a pop-up and a system notification at **80%** and again at **100%**.
+
+Session budgets carry over to later sessions until you clear them.
+
+</td>
+<td width="50%" valign="top">
+
+### 🌐 All-sessions total
+Every Claude Code session on your machine with token-meter installed feeds one shared ledger. Run three sessions at once and each shows the **same** "used / limit · left" figure, refreshed every **2 seconds**, including responses still streaming in the others.
+
+</td>
+</tr>
+</table>
+
+### 💸 Cost calculator
+Price a request *before* you send it, on every model or just one, both with fresh input and with input read from the prompt cache.
+
+```text
+> /token-cost 200k 20k sonnet
 ```
 
-Subagents' requests are counted too.
+---
 
-**An all-sessions total.** Every Claude Code session on your machine with token-meter installed adds its usage to a shared ledger, and every session shows the combined total over a rolling window (5 hours unless you set another). Run three sessions at once and each one shows the same "used / limit · left" figure, updated every 2 seconds, including responses still streaming in the other sessions.
+## 🖥️ What the pane looks like
 
-## Commands
+> Illustrative layout, based on what the plugin renders. Your numbers will differ.
 
-| Command | What it does |
-| --- | --- |
-| `/tokens` | Opens the token usage pane |
-| `/token-budget 500k` | Sets a token budget for the session |
-| `/token-budget $5` | Sets a dollar budget (both at once: `/token-budget 500k $5`) |
-| `/token-budget` | Shows the current budgets |
-| `/token-budget off` | Clears this session's budget |
-| `/token-budget all 5M` | Sets a budget shared by every session, over the last 5 hours |
-| `/token-budget all $20 24h` | A shared dollar budget over a different window (`5h`, `24h`, `7d`, ...) |
-| `/token-budget all off` | Clears the shared budget, in every session |
-| `/token-cost 200k 20k` | Prices 200k input + 20k output tokens on every model |
-| `/token-cost 200k 20k opus` | The same, for one model (`opus`, `sonnet`, `haiku`, `fable`, or an id like `opus-4-8`) |
+```text
+This session
+Input          188.5k
+  uncached       6.1k
+  cache read   176.2k
+  cache write    6.2k
+Output           6.1k
+All tokens     194.6k
+Requests          23
+Cost           $0.42
+Context window
+████░░░░░░░░░░░░░░░░ 18%
+Session cost budget
+████░░░░░░░░░░░░░░░░ 8%
+$0.42 of $5.00 · $4.58 left
 
-Budgets warn you with a pop-up and a system notification at **80%** and again at **100%**. A budget carries over to later sessions until you clear it.
-
-The token budget counts every token the session's requests processed, cache reads included. Cache reads grow quickly in long sessions, so a dollar budget usually tracks real spend more closely.
-
-The calculator shows two prices: input sent fresh, and the same input read from the prompt cache.
-
-### How the all-sessions total works
-
-- Each session writes its own requests to `~/.claude/token-meter/sessions/<session id>.json` and reads everyone's files every 2 seconds. No session writes another's file, so sessions running at the same time can't overwrite each other.
-- The shared budget lives in `~/.claude/token-meter/budget.json`, so setting it in one session sets it in all of them.
-- It's a rolling window: tokens older than the window drop off, and "left" grows back. Records older than 8 days are deleted.
-- It counts Claude Code sessions on this machine that have token-meter installed. It doesn't see claude.ai, the Claude apps' chat, or other computers.
-- **This is your own limit, not your plan's.** Anthropic doesn't publish plan limits in tokens, so the plugin can't know your plan's real allowance; `/usage` shows how much of the plan you've used as a percentage. Pick a number that suits you, for example by noting how many tokens a full 5-hour window takes before `/usage` reaches 100%.
-- The all-sessions cost is an estimate from API list prices, request by request.
-
-## Install
-
-You need Claude Code installed and signed in. Pick either way below.
-
-**Inside Claude Code.** Start a session in your terminal (`claude`) and type at the prompt:
-
+All sessions · last 5h
+Sessions            3 (1 responding now)
+All tokens      3.42M
+Cost            ~$2.10 (list prices)
+All-sessions token budget
+█████████████░░░░░░░ 68%
+3.42M of 5.00M · 1.58M left
 ```
+
+Bars turn **yellow** at 80% and **red** at 100% of a budget.
+
+---
+
+## 🚀 Install
+
+You need Claude Code installed and signed in. Pick either route.
+
+**Inside Claude Code**
+
+```text
 /plugin install token-meter --marketplace tanmayhc7/claude-token-meter
 ```
 
-1. Answer `y` when it asks to add the `claude-token-meter` marketplace.
-2. Pick a scope: **user** turns it on in every project, **project** only in the current folder (shared through the repo's `.claude/settings.json`), **local** only for you in the current folder.
+1. Answer `y` when asked to add the `claude-token-meter` marketplace.
+2. Pick a scope:
 
-**From a shell**, without opening a session:
+| Scope | Where it's on |
+| :-- | :-- |
+| **user** | Every project |
+| **project** | Current folder only, shared through the repo's `.claude/settings.json` |
+| **local** | Current folder only, just for you |
+
+**From a shell**
 
 ```bash
 claude plugin install token-meter --marketplace tanmayhc7/claude-token-meter
 ```
 
-Then start a new session. The plugin loads when a session starts, so a session that was already open won't have it until you restart it.
+Then **start a new session**. Plugins load at session start, so an already-open session won't have it until restarted.
 
-To check it's installed, type `/plugin` and look for `token-meter` in the list. To remove it:
+<details>
+<summary>Verify or remove</summary>
+
+Type `/plugin` and look for `token-meter` in the list. To remove it:
 
 ```bash
 claude plugin uninstall token-meter
 ```
 
-## Using it in Claude Code
+</details>
 
-1. **Start a session.** The **Token usage** pane opens beside the chat, and the status line shows `in … · out … · Σ …`. Both read zero until Claude answers.
-2. **Send a message.** While Claude responds, the output figure counts up (`+~240` is the live estimate). When the response finishes, the exact counts from the API replace the estimate.
-3. **Set a budget**, if you want a warning:
-   ```
-   /token-budget $5
-   ```
-   or by tokens, `/token-budget 500k`. At 80% you get a pop-up and a system notification, and again at 100%. Type `/token-budget` on its own to see the current budget, or `/token-budget off` to clear it.
-4. **Price a request before you send it:**
-   ```
-   /token-cost 200k 20k sonnet
-   ```
-   This prints what 200k input and 20k output tokens cost on Claude Sonnet 5.5, both sent fresh and with the input read from the prompt cache. Leave out the model to compare every model.
-5. **Closed the pane?** Type `/tokens` to open it again.
+---
 
-## Notes
+## ⌨️ Commands
 
-- The streaming figure is an estimate (about 4 characters per token). The exact counts replace it as soon as each response finishes.
-- Cost comes from Claude Code's own cost ledger, the same one `/cost` uses.
-- The calculator uses Anthropic API list prices kept in [`hooks/pricing.ts`](hooks/pricing.ts). Check them against [anthropic.com/pricing](https://www.anthropic.com/pricing) before budgeting on them. On a Claude plan (Pro, Max, Team) you aren't billed per token; usage counts against your plan's 5-hour and weekly limits instead.
+| Command | What it does |
+| :-- | :-- |
+| `/tokens` | Opens the token usage pane |
+| `/token-budget 500k` | Sets a **token** budget for this session |
+| `/token-budget $5` | Sets a **dollar** budget (both at once: `/token-budget 500k $5`) |
+| `/token-budget` | Shows the current budgets |
+| `/token-budget off` | Clears this session's budget |
+| `/token-budget all 5M` | Budget shared by **every** session, over the last 5 hours |
+| `/token-budget all $20 24h` | Shared dollar budget over another window (`5h`, `24h`, `7d`, …) |
+| `/token-budget all off` | Clears the shared budget, in every session |
+| `/token-cost 200k 20k` | Prices 200k input + 20k output on every model |
+| `/token-cost 200k 20k opus` | Same, for one model (`opus`, `sonnet`, `haiku`, `fable`, or an id like `opus-4-8`) |
 
-## Development
+> [!NOTE]
+> The token budget counts **every** token a session's requests processed, cache reads included. Cache reads pile up quickly in long sessions, so a **dollar budget usually tracks real spend more closely**.
+
+### 🧭 Quick tour
+
+1. **Start a session.** The pane opens and the status line reads zero until Claude answers.
+2. **Send a message.** The output figure counts up (`+~240` is the live estimate). When the response finishes, exact API counts replace it.
+3. **Set a budget** if you want a warning: `/token-budget $5` or `/token-budget 500k`.
+4. **Price a request** before sending: `/token-cost 200k 20k sonnet`.
+5. **Closed the pane?** `/tokens` brings it back.
+
+---
+
+## 🔬 How the all-sessions total works
+
+```mermaid
+flowchart LR
+    A["Session A"] -->|writes own file| FA[("sessions/A.json")]
+    B["Session B"] -->|writes own file| FB[("sessions/B.json")]
+    C["Session C"] -->|writes own file| FC[("sessions/C.json")]
+    BUD[("budget.json")]
+
+    FA --> R["Every session reads all files<br/>every 2 seconds"]
+    FB --> R
+    FC --> R
+    BUD --> R
+    R --> OUT["Rolling-window total<br/>shown in pane + status line"]
+```
+
+- **One writer per file.** Each session writes only `~/.claude/token-meter/sessions/<session id>.json`, so concurrent sessions can't overwrite each other.
+- **One shared budget.** It lives in `~/.claude/token-meter/budget.json`; setting it in one session sets it everywhere.
+- **Rolling window.** Tokens older than the window drop off and "left" grows back. Records older than **8 days** are deleted.
+- **Live streaming.** In-flight estimates from other sessions are included, and ignored if that session hasn't written for 60 seconds (crashed or closed).
+- **Scope.** It counts Claude Code sessions on **this machine** that have token-meter installed. It does not see claude.ai, the Claude apps' chat, or other computers.
+- **Cost is an estimate** from API list prices, request by request.
+
+> [!IMPORTANT]
+> **This is your own limit, not your plan's.** Anthropic doesn't publish plan limits in tokens, so the plugin can't know your real allowance. `/usage` shows plan usage as a percentage. Pick a number that suits you, for example by noting how many tokens a full 5-hour window takes before `/usage` reaches 100%.
+
+---
+
+## 📝 Notes
+
+- The streaming figure is an estimate (about **4 characters per token**). Exact counts replace it as each response finishes.
+- Session cost comes from Claude Code's own cost ledger, the same one `/cost` uses.
+- On a Claude plan (Pro, Max, Team) you aren't billed per token. Usage counts against your plan's 5-hour and weekly limits instead.
+
+<details>
+<summary><b>💰 Built-in price table</b> (USD per million tokens)</summary>
+
+<br>
+
+Prices live in [`hooks/pricing.ts`](hooks/pricing.ts) as Anthropic API list prices. Cache writes use the 5-minute rate. Check [anthropic.com/pricing](https://www.anthropic.com/pricing) before budgeting on them.
+
+| Alias | Model id | Input | Output | Cache read | Cache write |
+| :-- | :-- | --: | --: | --: | --: |
+| `fable` | `claude-fable-5-1` | $10 | $50 | $0.25 | $12.50 |
+| `opus` | `claude-opus-5-5` | $4 | $20 | $0.20 | $5 |
+| `sonnet` | `claude-sonnet-5-5` | $2 | $10 | $0.20 | $2.50 |
+| `haiku` | `claude-haiku-5-5` | $0.10 | $0.50 | $0.01 | $0.125 |
+
+Older ids such as `claude-opus-4-8`, `claude-sonnet-4-6` and `claude-haiku-4-5` are in the file too.
+
+</details>
+
+---
+
+## 🛠️ Development
+
+```text
+claude-token-meter/
+├── .claude-plugin/
+│   ├── plugin.json         # plugin manifest (token-meter v0.2.0)
+│   └── marketplace.json    # lets you install straight from this repo
+├── hooks/
+│   ├── hooks.json          # registers register.tsx
+│   ├── register.tsx        # commands, live streaming estimate, warnings, pane UI
+│   ├── ledger.ts           # shared per-session ledger and rolling-window totals
+│   └── pricing.ts          # price table, model lookup, amount parsing, formatting
+├── tests/
+│   └── token-meter.test.tsx
+└── types/
+    └── index.d.ts
+```
 
 ```bash
 claude plugin validate .
 claude plugin test .
 ```
 
-To try local changes, start Claude Code with `claude --plugin-dir /path/to/claude-token-meter`.
+Try local changes by starting Claude Code with:
 
-## License
+```bash
+claude --plugin-dir /path/to/claude-token-meter
+```
 
-MIT
+The tests cover the cost calculator, the 80% / 100% warning behavior (each fires once), and the all-sessions budget: windowing, streaming, and shared files.
+
+---
+
+## 📄 License
+
+[MIT](LICENSE) © Tanmay Chandavarkar
