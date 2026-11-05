@@ -1,7 +1,7 @@
 {
   "name": "token-meter",
-  "version": "0.1.0",
-  "description": "Live token usage, context fill and cost in a pane and the status line, with session budgets and a token cost calculator",
+  "version": "0.2.0",
+  "description": "Live token usage across all your Claude Code sessions, with budgets and a token cost calculator",
   "author": { "name": "Tanmay Chandavarkar" },
   "license": "MIT",
   "repository": "https://github.com/tanmayhc7/claude-token-meter",
