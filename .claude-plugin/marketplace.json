@@ -1,0 +1,6 @@
+{
+  "name": "claude-token-meter",
+  "owner": { "name": "Tanmay Chandavarkar" },
+  "description": "Live token usage, budgets and a cost calculator for Claude Code",
+  "plugins": [{ "name": "token-meter", "source": "./" }]
+}
