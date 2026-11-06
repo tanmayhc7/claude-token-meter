@@ -18,9 +18,9 @@ a shared total across **every** session on your machine, and a built-in cost cal
 
 <br>
 
-<a href="assets/demo.mp4"><img src="assets/demo.gif" alt="token-meter in 21 seconds: tokens counting live on the status line, the Token usage pane splitting input, cache and output, a $5 budget warning at 80%, and one total across three sessions" width="860"></a>
+<a href="assets/demo.mp4"><img src="assets/demo.gif" alt="token-meter in 25 seconds: tokens counting live on the status line, the Token usage pane splitting input, cache and output, a $5 budget warning at 80%, a burn-rate warning suggesting /model sonnet, one total across three sessions, and the pane on a phone" width="860"></a>
 
-<sub>21 seconds, no sound in the GIF. <a href="assets/demo.mp4">Watch the video with sound (MP4, 2.2 MB)</a>.</sub>
+<sub>25 seconds, no sound in the GIF. <a href="assets/demo.mp4">Watch the video with sound (MP4, 2.7 MB)</a>.</sub>
 
 </div>
 
