@@ -190,6 +190,24 @@ claude plugin uninstall token-meter
 
 ---
 
+## 📱 Using it on the Claude mobile app
+
+The pane draws on Claude Code's phone surface as well as the terminal, desktop and IDE ones. What you need depends on where the session runs:
+
+| Session | What to do |
+| :-- | :-- |
+| **On your computer, controlled from your phone** (Remote Control) | Nothing extra. The plugin runs on your computer, where it's installed, and the session counts toward your all-sessions total. |
+| **In the cloud**, started from the phone | Your computer's install doesn't reach it. Install the plugin at project scope in the repo and commit `.claude/settings.json` (below), so the repo's cloud sessions load it too. A cloud session keeps its own ledger, so it doesn't add to your computer's all-sessions total. |
+
+```bash
+claude plugin install token-meter --marketplace tanmayhc7/claude-token-meter --scope project
+```
+
+> [!NOTE]
+> **Regular chats aren't covered.** Claude Code plugins run only in Claude Code: the terminal, the desktop app's Code tab, IDE extensions and Claude Code sessions on mobile. Chats on claude.ai and in the Claude apps don't run plugins. For those, see your plan usage under **Settings → Usage** on claude.ai.
+
+---
+
 ## ⌨️ Commands
 
 | Command | What it does |
