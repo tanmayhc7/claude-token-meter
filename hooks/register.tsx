@@ -10,7 +10,7 @@ import {
   writeGlobalBudget,
   writeOwn,
 } from './ledger'
-import { PRICES, cost, findModel, fmt, parseAmount, usd } from './pricing'
+import { PRICES, cacheReadWeight, cost, countTokens, findModel, fmt, parseAmount, usd } from './pricing'
 
 const PANE = 'token-meter'
 const EMPTY: Usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, requests: 0, streaming: 0 }
@@ -33,18 +33,27 @@ let lastStreamWrite = 0
 /** Everything the session's requests processed: input, both cache kinds and output. */
 const totalTokens = (u: Usage) => u.input + u.cacheRead + u.cacheWrite + u.output
 
+/**
+ * What the session counts toward a budget: cache reads at their price weight.
+ * A value stored before 0.3.0 has no `counted` and is weighed at 0.1.
+ */
+const countedOf = (u: Usage) => u.counted ?? countTokens(u, 0.1)
+
+/** Above this, the pane suggests shrinking the context: each request re-reads all of it. */
+const BIG_CONTEXT = 100_000
+
 const showStatus = async ($: EngineInterface) => {
   const u = await read($, usage)
   const b = await read($, budget)
   const g = await read($, global)
   const gb = await read($, globalBudget)
   const live = u.streaming > 0 ? ` +~${fmt(u.streaming)}` : ''
-  const tok = b.tokens ? `${fmt(totalTokens(u))}/${fmt(b.tokens)}` : fmt(totalTokens(u))
+  const tok = b.tokens ? `${fmt(countedOf(u))}/${fmt(b.tokens)}` : fmt(countedOf(u))
   const ctx = u.contextPercent !== undefined ? ` · ctx ${u.contextPercent}%` : ''
   const money = u.costUsd !== undefined ? ` · ${usd(u.costUsd)}${b.usd ? `/${usd(b.usd)}` : ''}` : ''
   let all = ''
   if (g) {
-    const used = globalTotal(g) + g.streaming
+    const used = g.counted + g.streaming
     all = gb.tokens
       ? ` │ all ${fmt(used)}/${fmt(gb.tokens)} · ${fmt(Math.max(0, gb.tokens - used))} left`
       : gb.usd
@@ -88,7 +97,7 @@ const checkSession = async ($: EngineInterface) => {
   await warn(
     $,
     [
-      { key: 'tokens', used: totalTokens(u), limit: b.tokens, show: n => `${fmt(n)} tokens`, scope: 'session' },
+      { key: 'tokens', used: countedOf(u), limit: b.tokens, show: n => `${fmt(n)} tokens`, scope: 'session' },
       { key: 'usd', used: u.costUsd ?? 0, limit: b.usd, show: usd, scope: 'session' },
     ],
     true,
@@ -105,7 +114,7 @@ const checkGlobal = async ($: EngineInterface, notify: boolean) => {
   await warn(
     $,
     [
-      { key: 'all-tokens', used: globalTotal(g), limit: gb.tokens, show: n => `${fmt(n)} tokens`, scope },
+      { key: 'all-tokens', used: g.counted, limit: gb.tokens, show: n => `${fmt(n)} tokens`, scope },
       { key: 'all-usd', used: g.usd, limit: gb.usd, show: n => `~${usd(n)}`, scope },
     ],
     notify,
@@ -153,7 +162,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'token-budget',
       description: 'Set a budget for this session, or for all sessions with "all"',
-      argumentHint: '[500k | $5 | off | all 5M [5h] | all off]',
+      argumentHint: '500k, $5, off, or all 5M 5h',
     })
     await $.command.register({
       name: 'token-cost',
@@ -186,7 +195,8 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'token-budget' }, async ($, e) => {
-    const words = e.args.trim().split(/\s+/).filter(Boolean)
+    // The hint's own punctuation is ignored, so `[500k]` and `500k | $5` read as meant.
+    const words = e.args.replace(/[[\](){}|,]/g, ' ').trim().split(/\s+/).filter(Boolean)
     const first = words[0]?.toLowerCase()
 
     if (first === 'all') {
@@ -249,7 +259,7 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'token-cost' }, async (_$, e) => {
-    const [a, b, m] = e.args.trim().split(/\s+/)
+    const [a, b, m] = e.args.replace(/[[\](){}|<>]/g, ' ').trim().split(/\s+/)
     const input = parseAmount(a ?? '')
     const output = parseAmount(b ?? '')
     if (!Number.isFinite(input) || !Number.isFinite(output)) {
@@ -293,6 +303,13 @@ export const register: Register = on => {
         const r = await stream.next()
         if (r.done) {
           const u = r.value.usage
+          const counts = u && {
+            input: u.input_tokens,
+            output: u.output_tokens,
+            cacheRead: u.cache_read_input_tokens,
+            cacheWrite: u.cache_creation_input_tokens,
+          }
+          const counted = u && counts ? countTokens(counts, cacheReadWeight(u.model)) : 0
           await update($, usage, s => ({
             ...s,
             streaming: Math.max(0, s.streaming - shown / 4),
@@ -301,27 +318,22 @@ export const register: Register = on => {
               output: s.output + u.output_tokens,
               cacheRead: s.cacheRead + u.cache_read_input_tokens,
               cacheWrite: s.cacheWrite + u.cache_creation_input_tokens,
+              counted: countedOf(s) + counted,
               requests: s.requests + 1,
               model: u.model,
             }),
           }))
           shown = 0
-          if (u) {
+          if (u && counts) {
             const id = findModel(u.model)
             const price = id ? PRICES[id] : undefined
-            const counts = {
-              input: u.input_tokens,
-              output: u.output_tokens,
-              cacheRead: u.cache_read_input_tokens,
-              cacheWrite: u.cache_creation_input_tokens,
-            }
             const est = price ? cost(price, counts) : 0
             const now = await $.clock.now()
             const s = await read($, usage)
             await writeOwn($, f => ({
               ...f,
               streaming: s.streaming,
-              reqs: [...f.reqs, [now, counts.input, counts.output, counts.cacheRead, counts.cacheWrite, est]],
+              reqs: [...f.reqs, [now, counts.input, counts.output, counts.cacheRead, counts.cacheWrite, est, counted]],
             })).catch(() => undefined)
             await refreshGlobal($, true).catch(() => undefined)
           }
@@ -393,7 +405,8 @@ export const register: Register = on => {
       )
     }
     const ctxPct = u.contextPercent ?? 0
-    const gUsed = g ? globalTotal(g) + g.streaming : 0
+    const gCounted = g ? g.counted + g.streaming : 0
+    const ctx = u.contextTokens ?? 0
 
     return (
       <Box flexDirection="column">
@@ -405,6 +418,7 @@ export const register: Register = on => {
         {row('Output', fmt(u.output))}
         {u.streaming > 0 && row('  streaming', `~${fmt(u.streaming)} (estimate)`, true)}
         {row('All tokens', fmt(totalTokens(u)))}
+        {row('Counted', `${fmt(countedOf(u))} (cache reads weighted)`)}
         {row('Requests', String(u.requests))}
         {u.costUsd !== undefined && row('Cost', usd(u.costUsd))}
         <Text dimColor>Context window</Text>
@@ -413,10 +427,15 @@ export const register: Register = on => {
         </Text>
         {u.contextWindow !== undefined && (
           <Text dimColor>
-            {fmt(u.contextTokens ?? 0)} of {fmt(u.contextWindow)}
+            {fmt(ctx)} of {fmt(u.contextWindow)}
           </Text>
         )}
-        {b.tokens && meter('Session token budget', totalTokens(u), b.tokens, n => fmt(n))}
+        {ctx >= BIG_CONTEXT && (
+          <Text color="yellow">
+            Each request re-reads ~{fmt(ctx)} from cache. /compact, or /clear before a new task, shrinks it.
+          </Text>
+        )}
+        {b.tokens && meter('Session token budget', countedOf(u), b.tokens, n => fmt(n))}
         {b.usd && meter('Session cost budget', u.costUsd ?? 0, b.usd, usd)}
         <Text> </Text>
         <Text bold>All sessions · last {gb.windowHours}h</Text>
@@ -425,9 +444,10 @@ export const register: Register = on => {
         {g && row('Input', fmt(g.input + g.cacheRead + g.cacheWrite))}
         {g && row('Output', fmt(g.output))}
         {g && g.streaming > 0 && row('  streaming', `~${fmt(g.streaming)} (estimate)`, true)}
-        {g && row('All tokens', fmt(gUsed))}
+        {g && row('All tokens', fmt(globalTotal(g) + g.streaming))}
+        {g && row('Counted', fmt(gCounted))}
         {g && row('Cost', `~${usd(g.usd)} (list prices)`)}
-        {g && gb.tokens && meter('All-sessions token budget', gUsed, gb.tokens, n => fmt(n))}
+        {g && gb.tokens && meter('All-sessions token budget', gCounted, gb.tokens, n => fmt(n))}
         {g && gb.usd && meter('All-sessions cost budget', g.usd, gb.usd, n => `~${usd(n)}`)}
         {!b.tokens && !b.usd && !gb.tokens && !gb.usd && (
           <Text dimColor>No budget set: /token-budget 500k, or /token-budget all 5M</Text>

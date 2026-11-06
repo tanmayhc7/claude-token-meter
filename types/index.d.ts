@@ -13,6 +13,11 @@ export type Usage = {
   contextPercent?: number
   /** The engine's own cost ledger for the session, in US dollars. */
   costUsd?: number
+  /**
+   * Tokens toward the budget: cache reads at their price weight, the rest in
+   * full. Absent in a value an earlier version stored.
+   */
+  counted?: number
 }
 
 /** Limits for one session; either may be absent. Kept in $.store too. */
@@ -31,6 +36,8 @@ export type GlobalUsage = {
   output: number
   cacheRead: number
   cacheWrite: number
+  /** Tokens toward the budget: cache reads at their price weight, the rest in full. */
+  counted: number
   /** Estimated from list prices, per request. */
   usd: number
   /** Estimated output tokens streaming right now, in every session. */

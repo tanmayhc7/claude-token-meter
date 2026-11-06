@@ -110,3 +110,33 @@ test('the all-sessions budget totals every session inside its window and shows w
   await $.command.run({ command: 'token-budget', args: 'all 1M' })
   expect(toasts.some(t => t.includes('80%') && t.includes('all-sessions'))).toBe(true)
 })
+
+test('the budget command reads the hint as typed: [500k] and $5 | 500k', async ($, on) => {
+  await start($, on)
+  expect((await $.command.run({ command: 'token-budget', args: '[500k]' })).text).toContain('500.0k tokens')
+  const both = await $.command.run({ command: 'token-budget', args: '[$5 | 500k]' })
+  expect(both.text).toContain('500.0k tokens and $5.00')
+})
+
+test('cache reads count toward the all-sessions budget at their price weight', async ($, on) => {
+  const files = new Map<string, string>()
+  // One Opus 5.5 request that re-read 275k from cache: 2 fresh + 300 out + 200 written + 275k x 0.05 = 14,252.
+  // One record from 0.2.0 without a counted figure: its 100k cache reads weigh 0.1, so 10k + 1k out = 11k.
+  files.set(
+    `${SESSIONS}/other.json`,
+    JSON.stringify({
+      id: 'other',
+      cwd: '/x',
+      updatedAt: NOW,
+      streaming: 0,
+      reqs: [
+        [NOW - 1000, 2, 300, 275_000, 200, 0.06, 14_252],
+        [NOW - 2000, 0, 1_000, 100_000, 0, 0.02],
+      ],
+    }),
+  )
+  const { statuses } = await start($, on, files)
+  await $.command.run({ command: 'token-budget', args: 'all 100k' })
+  // 14,252 + 11,000 = 25,252 counted, though 376.5k tokens were processed.
+  expect(statuses[statuses.length - 1]).toContain('all 25.3k/100.0k · 74.7k left')
+})
