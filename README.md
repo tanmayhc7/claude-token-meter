@@ -205,8 +205,10 @@ claude plugin uninstall token-meter
 | `/token-cost 200k 20k` | Prices 200k input + 20k output on every model |
 | `/token-cost 200k 20k opus` | Same, for one model (`opus`, `sonnet`, `haiku`, `fable`, or an id like `opus-4-8`) |
 
+Brackets and `|` are ignored, so typing the hint as shown (`[500k]`) works too.
+
 > [!NOTE]
-> The token budget counts **every** token a session's requests processed, cache reads included. Cache reads pile up quickly in long sessions, so a **dollar budget usually tracks real spend more closely**.
+> **How token budgets count.** Every request re-sends the whole conversation, and most of it comes from the prompt cache. Counting those cache reads in full would use up a 500k budget in two requests of a long conversation, so budgets count them **at their price weight**: fresh input, cache writes and output in full, cache reads at what they cost next to fresh input (1/20 on Opus 5.5, 1/10 on most models). The pane lists both: **All tokens** (everything, raw) and **Counted** (what the budget uses).
 
 ### 🧭 Quick tour
 
@@ -243,6 +245,24 @@ flowchart LR
 
 > [!IMPORTANT]
 > **This is your own limit, not your plan's.** Anthropic doesn't publish plan limits in tokens, so the plugin can't know your real allowance. `/usage` shows plan usage as a percentage. Pick a number that suits you, for example by noting how many tokens a full 5-hour window takes before `/usage` reaches 100%.
+
+---
+
+## 💡 Keeping cache reads down
+
+Cache reads are the conversation so far, re-read on every request. A 275k-token conversation re-reads 275k each time Claude replies or calls a tool, so they grow with **conversation length × number of requests**. The pane shows a yellow hint once the context passes 100k. To keep them down:
+
+| Do this | Why it helps |
+| :-- | :-- |
+| **`/clear` or a new session for each new task** | The biggest lever: the next request starts from a near-empty context instead of everything before. |
+| **`/compact`** when a long task must continue | Replaces the history with a summary, so every later request re-reads far less. `/compact keep the API decisions` steers what it keeps. |
+| **Read parts of big files**, not whole files | A 3,000-line file read once stays in the context and is re-read on every later request. |
+| **Hand broad searches to a subagent** | A subagent explores in its own context and returns only its conclusion, so the reading never enters yours. |
+| **Turn off MCP servers and plugins you don't use** | Their tool definitions sit in every request. `/context` shows what's taking room. |
+| **Keep `CLAUDE.md` short** | It's loaded into every session and re-read with every request. |
+| **Fewer, larger requests** | Many small back-and-forth turns each re-read the full context; one clear, complete request re-reads it once. |
+
+Cache reads are already the cheapest kind of token, 1/10 to 1/20 the price of fresh input, and a warm cache is what keeps long sessions affordable. The aim is a smaller context, not avoiding the cache.
 
 ---
 

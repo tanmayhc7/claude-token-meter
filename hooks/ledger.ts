@@ -5,8 +5,14 @@ import type { EngineInterface } from 'claude-code'
 
 import type { GlobalBudget, GlobalUsage } from '../types'
 
-/** One model request: when, its four token counts, and its estimated cost. */
-export type Req = [ts: number, input: number, output: number, cacheRead: number, cacheWrite: number, usd: number]
+/**
+ * One model request: when, its four token counts, its estimated cost, and the
+ * tokens it counts toward a budget (absent in records from version 0.2.0).
+ */
+export type Req = [ts: number, input: number, output: number, cacheRead: number, cacheWrite: number, usd: number, counted?: number]
+
+/** An old record without `counted` weighs its cache reads at the common 0.1. */
+const OLD_WEIGHT = 0.1
 
 export type SessionFile = {
   id: string
@@ -90,6 +96,7 @@ export async function totalAll($: EngineInterface, windowHours: number): Promise
     output: 0,
     cacheRead: 0,
     cacheWrite: 0,
+    counted: 0,
     usd: 0,
     streaming: 0,
   }
@@ -104,13 +111,14 @@ export async function totalAll($: EngineInterface, windowHours: number): Promise
     const f = await readJson<SessionFile>($, `${dir}/${e.name}`)
     if (!f) continue
     let counted = false
-    for (const [ts, i, o, cr, cw, usd] of f.reqs) {
+    for (const [ts, i, o, cr, cw, usd, c] of f.reqs) {
       if (ts < from) continue
       counted = true
       g.input += i
       g.output += o
       g.cacheRead += cr
       g.cacheWrite += cw
+      g.counted += c ?? i + o + cw + cr * OLD_WEIGHT
       g.usd += usd
     }
     if (f.streaming > 0 && now - f.updatedAt < STALE_MS) {
@@ -123,4 +131,5 @@ export async function totalAll($: EngineInterface, windowHours: number): Promise
   return g
 }
 
+/** Every token processed, cache reads in full: what the pane lists. */
 export const globalTotal = (g: GlobalUsage) => g.input + g.output + g.cacheRead + g.cacheWrite

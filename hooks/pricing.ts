@@ -37,10 +37,24 @@ export const findModel = (name: string): string | undefined => {
 
 /** Reads `250k`, `1.5M`, `12,000`, `$5`, `5` into a number; NaN if it isn't one. */
 export const parseAmount = (s: string): number => {
-  const m = s.trim().toLowerCase().replace(/[$,_]/g, '').match(/^(\d+(?:\.\d+)?)([km]?)$/)
+  const m = s.trim().toLowerCase().replace(/[$,_\s]/g, '').match(/^(\d+(?:\.\d+)?)([km]?)$/)
   if (!m) return NaN
   return Number(m[1]) * (m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : 1)
 }
+
+/** What a cache-read token costs next to a fresh input token on this model (0.05 on Opus 5.5, 0.1 on most). */
+export const cacheReadWeight = (model?: string): number => {
+  const id = model ? findModel(model) : undefined
+  const p = id ? PRICES[id] : undefined
+  return p ? p.cacheRead / p.input : 0.1
+}
+
+/**
+ * Tokens as budgets count them: fresh input, cache writes and output in full,
+ * cache reads (the conversation re-read on every request) at their price weight.
+ */
+export const countTokens = (t: { input: number; output: number; cacheRead: number; cacheWrite: number }, weight: number) =>
+  t.input + t.output + t.cacheWrite + t.cacheRead * weight
 
 export const cost = (p: Price, t: { input: number; output: number; cacheRead?: number; cacheWrite?: number }) =>
   (t.input * p.input + t.output * p.output + (t.cacheRead ?? 0) * p.cacheRead + (t.cacheWrite ?? 0) * p.cacheWrite) / 1e6
