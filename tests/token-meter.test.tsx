@@ -140,3 +140,19 @@ test('cache reads count toward the all-sessions budget at their price weight', a
   // 14,252 + 11,000 = 25,252 counted, though 376.5k tokens were processed.
   expect(statuses[statuses.length - 1]).toContain('all 25.3k/100.0k · 74.7k left')
 })
+
+test('the pane draws on every surface, phone included', async ($, on) => {
+  await start($, on)
+  for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'token-meter',
+      component: 'Pane',
+      requestId: 'token-meter',
+      surface,
+      props: { title: 'Token usage', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+    })
+    expect((await ui.find({ type: 'Text', text: /This session/ }))?.text).toBe('This session')
+    expect(await ui.find({ type: 'Text', text: /All sessions/ })).toBeTruthy()
+    await ui.unmount()
+  }
+})
