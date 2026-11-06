@@ -151,6 +151,45 @@ claude plugin uninstall token-meter
 
 ---
 
+## 🖥️ Using it in the Claude desktop app
+
+token-meter runs in the desktop app's **Code** tab, which is Claude Code. It doesn't run in the app's regular chat.
+
+**Install it once, from a terminal.** The `/plugin` dialog only works in a terminal session, so use the shell command. Open the Terminal app (or the Terminal panel in the Code tab) and run:
+
+```bash
+claude plugin install token-meter --marketplace tanmayhc7/claude-token-meter
+```
+
+Pick the **user** scope so it's on in every project. The desktop app reads the same Claude Code settings as the terminal, so nothing else needs setting up.
+
+**Then, in the desktop app:**
+
+1. Open the **Code** tab and start a **new** session. A session that was already open won't load the plugin.
+2. The **Token usage** pane opens beside the conversation. Closed it? Type `/tokens` in the prompt box.
+3. Type the commands in the prompt box, the same as in a terminal: `/token-budget $5`, `/token-budget all 5M`, `/token-cost 200k 20k sonnet`. Start typing `/token` to see them in the suggestions.
+4. Budget warnings show as a pop-up in the app and as a macOS notification, if notifications are allowed for Claude.
+
+> [!TIP]
+> Desktop and terminal sessions share one all-sessions total, so a session in the desktop app and one in your terminal both count toward `/token-budget all`.
+
+<details>
+<summary>Update or remove</summary>
+
+Run in a terminal, then start a new session in the Code tab:
+
+```bash
+claude plugin update token-meter
+```
+
+```bash
+claude plugin uninstall token-meter
+```
+
+</details>
+
+---
+
 ## ⌨️ Commands
 
 | Command | What it does |
