@@ -12,9 +12,15 @@ a shared total across **every** session on your machine, and a built-in cost cal
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757?style=for-the-badge)](https://github.com/tanmayhc7/claude-token-meter)
 [![TypeScript](https://img.shields.io/badge/TypeScript-TSX-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](hooks/register.tsx)
-[![Version](https://img.shields.io/badge/version-0.2.0-blue?style=for-the-badge)](.claude-plugin/plugin.json)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue?style=for-the-badge)](.claude-plugin/plugin.json)
 
 [**Install**](#-install) · [**Features**](#-features) · [**Commands**](#-commands) · [**How it works**](#-how-the-all-sessions-total-works) · [**Development**](#-development)
+
+<br>
+
+<a href="assets/demo.mp4"><img src="assets/demo.gif" alt="token-meter in 21 seconds: tokens counting live on the status line, the Token usage pane splitting input, cache and output, a $5 budget warning at 80%, and one total across three sessions" width="860"></a>
+
+<sub>21 seconds, no sound in the GIF. <a href="assets/demo.mp4">Watch the video with sound (MP4, 2.2 MB)</a>.</sub>
 
 </div>
 
