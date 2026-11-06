@@ -1,5 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
+import { burnMessage, lighterModel, modelName, perMinute } from '../hooks/burn'
+
 const HOME = '/home/test'
 const SESSIONS = `${HOME}/.claude/token-meter/sessions`
 const NOW = 1_800_000_000_000
@@ -155,4 +157,29 @@ test('the pane draws on every surface, phone included', async ($, on) => {
     expect(await ui.find({ type: 'Text', text: /All sessions/ })).toBeTruthy()
     await ui.unmount()
   }
+})
+
+test('the burn rate averages over 5 minutes and names a lighter model', async () => {
+  const now = NOW
+  // 250k counted in the last 5 minutes = 50k/min; a request 6 minutes ago has aged out.
+  const recent: [number, number][] = [[now - 6 * 60_000, 900_000], [now - 60_000, 150_000], [now - 1000, 100_000]]
+  expect(perMinute(recent, now)).toBe(50_000)
+  expect(modelName('claude-opus-5-5')).toBe('Opus 5.5')
+  expect(lighterModel('claude-opus-5-5')?.alias).toBe('sonnet')
+  expect(lighterModel('claude-sonnet-5-5')?.alias).toBe('haiku')
+  expect(lighterModel('claude-haiku-5-5')).toBeUndefined()
+  const fmt = (n: number) => `${(n / 1000).toFixed(1)}k`
+  expect(burnMessage('claude-opus-5-5', 50_000, fmt)).toBe(
+    "Token meter: burning ~50.0k tokens/min on Opus 5.5. For work that doesn't need it, Sonnet costs much less: /model sonnet",
+  )
+  expect(burnMessage('claude-haiku-5-5', 50_000, fmt)).toContain('/compact')
+})
+
+test('the rate limit can be set, read back and turned off', async ($, on) => {
+  await start($, on)
+  expect((await $.command.run({ command: 'token-budget', args: 'rate' })).text).toContain('at 40.0k/min')
+  expect((await $.command.run({ command: 'token-budget', args: 'rate 60k/min' })).text).toContain('60.0k+ tokens/min')
+  expect((await $.command.run({ command: 'token-budget', args: 'rate' })).text).toContain('at 60.0k/min')
+  expect((await $.command.run({ command: 'token-budget', args: 'rate off' })).text).toContain('off')
+  expect((await $.command.run({ command: 'token-budget', args: 'rate' })).text).toContain('Suggestions are off')
 })

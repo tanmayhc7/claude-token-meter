@@ -1,6 +1,6 @@
 {
   "name": "token-meter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Live token usage across all your Claude Code sessions, with budgets and a token cost calculator",
   "author": { "name": "Tanmay Chandavarkar" },
   "license": "MIT",

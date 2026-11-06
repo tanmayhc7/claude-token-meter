@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Budget, GlobalBudget, GlobalUsage, Usage } from '../types'
+import type { Budget, Burn, GlobalBudget, GlobalUsage, Usage } from '../types'
 import {
   DEFAULT_WINDOW_HOURS,
   globalTotal,
@@ -10,6 +10,7 @@ import {
   writeGlobalBudget,
   writeOwn,
 } from './ledger'
+import { DEFAULT_RATE_LIMIT, RATE_WARN_EVERY_MS, burnMessage, perMinute, prune } from './burn'
 import { PRICES, cacheReadWeight, cost, countTokens, findModel, fmt, parseAmount, usd } from './pricing'
 
 const PANE = 'token-meter'
@@ -21,7 +22,10 @@ const globalBudget = atom({ plugin: 'token-meter', key: 'globalBudget' } as cons
   shape: 'gbudget-1',
 })
 const warned = atom({ plugin: 'token-meter', key: 'warned' } as const, [] as string[], { shape: 'warned-1' })
+const burn = atom({ plugin: 'token-meter', key: 'burn' } as const, { recent: [], perMin: 0 } as Burn, { shape: 'burn-1' })
+const rateLimit = atom({ plugin: 'token-meter', key: 'rateLimit' } as const, DEFAULT_RATE_LIMIT, { shape: 'rate-1' })
 const STORE_BUDGET = 'budget'
+const STORE_RATE = 'rateLimit'
 const LEVELS = [80, 100] as const
 const POLL_MS = 2000
 const STREAM_WRITE_MS = 1500
@@ -60,7 +64,29 @@ const showStatus = async ($: EngineInterface) => {
         ? ` │ all ~${usd(g.usd)}/${usd(gb.usd)} · ${usd(Math.max(0, gb.usd - g.usd))} left`
         : ` │ all ${fmt(used)} (${gb.windowHours}h)`
   }
-  $.ui.status(`in ${fmt(u.input + u.cacheRead + u.cacheWrite)} · out ${fmt(u.output)}${live} · Σ ${tok}${ctx}${money}${all}`)
+  const br = await read($, burn)
+  const lim = await read($, rateLimit)
+  const hot = lim > 0 && br.perMin >= lim ? ` · ⚡ ${fmt(br.perMin)}/min` : ''
+  $.ui.status(`in ${fmt(u.input + u.cacheRead + u.cacheWrite)} · out ${fmt(u.output)}${live} · Σ ${tok}${hot}${ctx}${money}${all}`)
+}
+
+/**
+ * Adds a finished request (if any) to the rolling window, recomputes the rate,
+ * and suggests a lighter model when it stays at or over the limit.
+ */
+const updateBurn = async ($: EngineInterface, add?: number, model?: string) => {
+  const now = await $.clock.now()
+  const old = await read($, burn)
+  const recent = prune(add !== undefined ? [...old.recent, [now, add]] : old.recent, now)
+  const perMin = perMinute(recent, now)
+  const lim = await read($, rateLimit)
+  const due = lim > 0 && perMin >= lim && now - (old.warnedAt ?? 0) >= RATE_WARN_EVERY_MS
+  if (due) $.ui.toast(burnMessage(model ?? (await read($, usage)).model, perMin, fmt), { timeoutMs: 12000 })
+  if (add !== undefined || perMin !== old.perMin || due) {
+    await update($, burn, b => ({ recent, perMin, warnedAt: due ? now : b.warnedAt }))
+    return true
+  }
+  return false
 }
 
 type Check = { key: string; used: number; limit?: number; show: (n: number) => string; scope: string }
@@ -162,7 +188,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'token-budget',
       description: 'Set a budget for this session, or for all sessions with "all"',
-      argumentHint: '500k, $5, off, or all 5M 5h',
+      argumentHint: '500k, $5, off, all 5M 5h, or rate 40k',
     })
     await $.command.register({
       name: 'token-cost',
@@ -173,9 +199,17 @@ export const register: Register = on => {
     // A session budget set in an earlier session carries over.
     const saved = (await $.store.get(STORE_BUDGET)) as Budget | undefined
     if (saved && (saved.tokens || saved.usd)) await update($, budget, () => saved)
+    const savedRate = await $.store.get(STORE_RATE)
+    if (typeof savedRate === 'number') await update($, rateLimit, () => savedRate)
     await writeOwn($, f => ({ ...f, cwd: e.cwd, streaming: 0 })).catch(() => undefined)
     poll?.cancel()
-    poll = $.clock.every(POLL_MS, () => void refreshGlobal($).catch(() => undefined))
+    poll = $.clock.every(POLL_MS, () => {
+      void refreshGlobal($).catch(() => undefined)
+      // The rate falls as requests age out of the window, even with no new ones.
+      void updateBurn($)
+        .then(moved => (moved ? showStatus($) : undefined))
+        .catch(() => undefined)
+    })
     void refreshGlobal($).catch(() => undefined)
     void $.ui.open({ id: PANE, title: 'Token usage' })
     void showStatus($)
@@ -198,6 +232,29 @@ export const register: Register = on => {
     // The hint's own punctuation is ignored, so `[500k]` and `500k | $5` read as meant.
     const words = e.args.replace(/[[\](){}|,]/g, ' ').trim().split(/\s+/).filter(Boolean)
     const first = words[0]?.toLowerCase()
+
+    if (first === 'rate') {
+      const arg = words[1]?.toLowerCase().replace(/\/min$/, '')
+      const lim = await read($, rateLimit)
+      if (!arg) {
+        const br = await read($, burn)
+        return {
+          text: `Burn rate: ${fmt(br.perMin)} tokens/min over the last 5 minutes. ${lim > 0 ? `You get a lighter-model suggestion at ${fmt(lim)}/min.` : 'Suggestions are off.'}\nChange it with /token-budget rate 60k, or turn it off with /token-budget rate off.`,
+        }
+      }
+      if (arg === 'off') {
+        await update($, rateLimit, () => 0)
+        await $.store.set(STORE_RATE, 0)
+        await showStatus($)
+        return { text: 'Burn-rate suggestions are off.' }
+      }
+      const n = parseAmount(arg)
+      if (!Number.isFinite(n) || n <= 0) return { text: `Couldn't read "${words[1]}". Try /token-budget rate 60k.` }
+      await update($, rateLimit, () => n)
+      await $.store.set(STORE_RATE, n)
+      await showStatus($)
+      return { text: `You'll get a lighter-model suggestion when this session burns ${fmt(n)}+ tokens/min (at most once every 15 minutes). It applies to later sessions too.` }
+    }
 
     if (first === 'all') {
       const rest = words.slice(1)
@@ -336,6 +393,7 @@ export const register: Register = on => {
               reqs: [...f.reqs, [now, counts.input, counts.output, counts.cacheRead, counts.cacheWrite, est, counted]],
             })).catch(() => undefined)
             await refreshGlobal($, true).catch(() => undefined)
+            await updateBurn($, counted, u.model)
           }
           await checkSession($)
           await showStatus($)
@@ -407,6 +465,9 @@ export const register: Register = on => {
     const ctxPct = u.contextPercent ?? 0
     const gCounted = g ? g.counted + g.streaming : 0
     const ctx = u.contextTokens ?? 0
+    const br = await read($, burn)
+    const lim = await read($, rateLimit)
+    const hot = lim > 0 && br.perMin >= lim
 
     return (
       <Box flexDirection="column">
@@ -419,6 +480,13 @@ export const register: Register = on => {
         {u.streaming > 0 && row('  streaming', `~${fmt(u.streaming)} (estimate)`, true)}
         {row('All tokens', fmt(totalTokens(u)))}
         {row('Counted', `${fmt(countedOf(u))} (cache reads weighted)`)}
+        <Text>
+          <Text dimColor>{'Burn rate'.padEnd(14)}</Text>
+          <Text bold color={hot ? 'yellow' : undefined}>
+            {fmt(br.perMin)}/min
+          </Text>
+          <Text dimColor>{lim > 0 ? ` (suggests a lighter model at ${fmt(lim)})` : ' (last 5 min)'}</Text>
+        </Text>
         {row('Requests', String(u.requests))}
         {u.costUsd !== undefined && row('Cost', usd(u.costUsd))}
         <Text dimColor>Context window</Text>
