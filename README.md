@@ -75,6 +75,9 @@ Every Claude Code session on your machine with token-meter installed feeds one s
 </tr>
 </table>
 
+### ⚡ Burn-rate warning
+When a session burns tokens fast (40k counted tokens a minute by default, averaged over the last 5 minutes), a pop-up suggests a lighter model for work that doesn't need the heavy one: Opus or Fable → `/model sonnet`, Sonnet → `/model haiku`. On Haiku it suggests `/compact` instead. It shows at most once every 15 minutes, the pane always shows the current rate, and the status line adds `⚡ 48.0k/min` while you're over. It only suggests: it never switches models for you.
+
 ### 💸 Cost calculator
 Price a request *before* you send it, on every model or just one, both with fresh input and with input read from the prompt cache.
 
@@ -226,6 +229,9 @@ claude plugin install token-meter --marketplace tanmayhc7/claude-token-meter --s
 | `/token-budget all 5M` | Budget shared by **every** session, over the last 5 hours |
 | `/token-budget all $20 24h` | Shared dollar budget over another window (`5h`, `24h`, `7d`, …) |
 | `/token-budget all off` | Clears the shared budget, in every session |
+| `/token-budget rate` | Shows this session's burn rate and the suggestion threshold |
+| `/token-budget rate 60k` | Suggests a lighter model at 60k counted tokens/min instead of 40k |
+| `/token-budget rate off` | Turns burn-rate suggestions off |
 | `/token-cost 200k 20k` | Prices 200k input + 20k output on every model |
 | `/token-cost 200k 20k opus` | Same, for one model (`opus`, `sonnet`, `haiku`, `fable`, or an id like `opus-4-8`) |
 

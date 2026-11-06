@@ -23,6 +23,9 @@ export type Usage = {
 /** Limits for one session; either may be absent. Kept in $.store too. */
 export type Budget = { tokens?: number; usd?: number }
 
+/** This session's burn rate: requests in the last 5 minutes, and when it last suggested a lighter model. */
+export type Burn = { recent: [ts: number, counted: number][]; perMin: number; warnedAt?: number }
+
 /** A limit shared by every session on this machine, over a rolling window of hours. */
 export type GlobalBudget = { tokens?: number; usd?: number; windowHours: number }
 
@@ -51,6 +54,9 @@ declare module 'claude-code' {
       budget: Shaped<Budget>
       global: Shaped<GlobalUsage | null>
       globalBudget: Shaped<GlobalBudget>
+      burn: Shaped<Burn>
+      /** Counted tokens per minute that trigger a lighter-model suggestion; 0 turns it off. */
+      rateLimit: Shaped<number>
       /** Warnings already raised this session, as `tokens-80`, `all-usd-100`, ... */
       warned: Shaped<string[]>
     }
